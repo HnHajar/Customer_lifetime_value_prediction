@@ -256,3 +256,42 @@ if __name__ == "__main__":
     path = os.path.join(os.path.dirname(__file__), "..", "data", "OnlineRetail.xlsx")
     df, df_train, df_valid, summary, summary_valid, split_date, end_date = run_prep_pipeline(path)
     print(summary.head())
+
+
+
+
+
+
+# ON TEEEEESTE (:
+#AVEC : (python3 -c 'from src.data_prep import run_prep_pipeline; results = run_prep_pipeline("data/OnlineRetail.xlsx"); print("\nNombre de résultats :", len(results)); print("\nAperçu :"); print(results[4].head())')
+# resultat obtenu : 
+#==================================================
+  #DATA PREPARATION
+#==================================================
+#Loading data from: data/OnlineRetail.xlsx
+#Raw shape: (541909, 8)
+
+  #Train period : 2010-12-01 → 2011-09-06 (231,661 transactions)
+  #Valid period : 2011-09-06 → 2011-12-09 (166,223 transactions)
+
+  #Customer summary table:
+    #Total customers    : 3,342
+    #One-time buyers    : 1,368 (40.9%)
+    #Repeat buyers      : 1,974 (59.1%)
+    #Avg frequency      : 2.49 repeat purchases
+    #Avg monetary       : $398.55 per order
+    #Avg T (age)        : 179 days
+
+  #Customer summary saved to: /home/sara/Bureau/Customer_lifetime_value_prediction/src/../outputs/customer_summary.csv
+
+#Nombre de résultats : 7
+
+#Aperçu :
+#  CustomerID      first_purchase       last_purchase  ...    T      monetary  actual_future_purchases
+#0      12346 2011-01-18 10:01:00 2011-01-18 10:01:00  ...  230  77183.600000                      0.0
+#1      12347 2010-12-07 14:57:00 2011-08-02 08:48:00  ...  272    558.172000                      2.0
+#2      12348 2010-12-16 19:09:00 2011-04-05 10:47:00  ...  263    495.746667                      1.0
+#3      12350 2011-02-02 16:01:00 2011-02-02 16:01:00  ...  215    334.400000                      0.0
+#4      12352 2011-02-16 12:33:00 2011-03-22 16:08:00  ...  201    312.362000                      3.0
+
+#[5 rows x 10 columns]
