@@ -8,6 +8,7 @@ import os #os pour la gestion des chemins et fichiers
 # Use 75% of the data to train, 25% to validate
 TRAIN_FRACTION = 0.75
 
+# ── Load & Clean ──────────────────────────────────────────────────────────────
 
 #fonction de chargement et nettoyage du dataset online retail.xlsx
 #le fct recoit le chemin du fichier  et retourne un dataframe pandas
@@ -76,9 +77,9 @@ def split_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timesta
 #Train + Validation : 397884
 #)
 
+# ── Customer Summary Table ────────────────────────────────────────────────────
 
-# ── passer des transactions individuelles à un tableau qui décrit chaque client avec des indicateurs qui va servire a alimenter les modeles clv────────────────────────────────────────────────────
-
+# ── passer des transactions individuelles à un tableau qui décrit chaque client avec des indicateurs qui va servire a alimenter les modeles clv───────────────────────────────────────────────────
 def build_customer_summary(df_train: pd.DataFrame, split_date: pd.Timestamp) -> pd.DataFrame:
     #pour faire cela il faut passer de 2 agregations 
     # premierement : passer de transactions a commandes , un client peut acheter plusieurs produits dans une meme commande , or pour calculer le clv nous voulons connaitre la valeur de chaque commande pas de chaque produit 
@@ -168,3 +169,90 @@ def build_customer_summary(df_train: pd.DataFrame, split_date: pd.Timestamp) -> 
 #Dimensions : (3342, 9)
 
 #)
+
+# ── Validation Summary ────────────────────────────────────────────────────────
+
+#on veut construire un tableau de validatgion en ajoutant les achats reelement effectues pendant la periode de validation au tableau des indicateurs clients construit avec training 
+def build_validation_summary(df_valid: pd.DataFrame, summary: pd.DataFrame) -> pd.DataFrame:
+    #Elle effectue trois opérations :
+    #1. Compter les achats réels de chaque client dans df_valid avec groupby() et nunique().
+    #2. Associer ces résultats au tableau summary avec merge(), grâce à CustomerID.
+    #3. Remplacer les valeurs manquantes par 0 avec fillna(0)
+
+    #1
+    actual = (
+        df_valid[df_valid["CustomerID"].isin(summary["CustomerID"])]#isin conserve uniquement les clients presents dans summary , ceux connus pendant training 
+        .groupby("CustomerID")["InvoiceNo"]
+        .nunique()
+        .reset_index()
+        .rename(columns={"InvoiceNo": "actual_future_purchases"})#donne un nom explicite a la nouvelle colonne 
+    )
+
+    summary_valid = summary.merge(actual, on="CustomerID", how="left") #fusionner les deux tableaux , on ajoute les achats reels a chaque client en utilisant son id 
+    summary_valid["actual_future_purchases"] = summary_valid["actual_future_purchases"].fillna(0) #un client abscent de actual , on le remplace par 0
+
+    return summary_valid
+
+#test avec cmd (python3 -c 'from src.data_prep import load_data, split_data, build_customer_summary, build_validation_summary; df = load_data("data/OnlineRetail.xlsx"); df_train, df_valid, split_date, end_date = split_data(df); summary = build_customer_summary(df_train, split_date); summary_valid = build_validation_summary(df_valid, summary); print("\nAperçu :"); print(summary_valid[["CustomerID", "frequency", "recency", "T", "actual_future_purchases"]].head(10)); print("\nDimensions :", summary_valid.shape); print("\nClients sans achat futur :", (summary_valid["actual_future_purchases"] == 0).sum())')
+#resultat obtenu 
+#Raw shape: (541909, 8)
+
+  #Train period : 2010-12-01 → 2011-09-06 (231,661 transactions)
+  #Valid period : 2011-09-06 → 2011-12-09 (166,223 transactions)
+
+  #Customer summary table:
+    #Total customers    : 3,342
+    #One-time buyers    : 1,368 (40.9%)
+    #Repeat buyers      : 1,974 (59.1%)
+    #Avg frequency      : 2.49 repeat purchases
+    #Avg monetary       : $398.55 per order
+    #Avg T (age)        : 179 days
+
+#Aperçu :
+  #CustomerID  frequency  recency    T  actual_future_purchases
+#0      12346          0        0  230                      0.0
+#1      12347          4      237  272                      2.0
+#2      12348          2      109  263                      1.0
+#3      12350          0        0  215                      0.0
+#4      12352          4       34  201                      3.0
+#5      12353          0        0  109                      0.0
+#6      12354          0        0  137                      0.0
+#7      12355          0        0  119                      0.0
+#8      12356          1       80  230                      1.0
+#9      12358          0        0   55                      1.0
+
+#Dimensions : (3342, 10)
+
+#Clients sans achat futur : 1406
+
+
+
+# ── Pipeline ──────────────────────────────────────────────────────────────────
+
+#fct principale de data_prep.py : elle orchestre les fcts qu on na deja developpes 
+def run_prep_pipeline(filepath: str) -> tuple:      # la fct recoit le chemin du dataset 
+    print("=" * 50)
+    print("  DATA PREPARATION")
+    print("=" * 50)
+
+    #executer les fcts precedentes 
+    df                       = load_data(filepath)
+    df_train, df_valid, split_date, end_date = split_data(df)
+    summary                  = build_customer_summary(df_train, split_date)
+    summary_valid            = build_validation_summary(df_valid, summary)
+
+    # Sauvegarder le tableau en csv
+    out_path = os.path.join(os.path.dirname(__file__), "..", "outputs", "customer_summary.csv")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    summary_valid.to_csv(out_path, index=False)
+    print(f"\n  Customer summary saved to: {out_path}")
+
+    return df, df_train, df_valid, summary, summary_valid, split_date, end_date
+
+# bloc main : permet d executer et de tester directement data_prep.py
+# ! ce bloc s execute que  si on lance directemtn ce fichier python , si import data_prep.py dans main.py ce bloc ne s execute pas 
+if __name__ == "__main__":
+    import os
+    path = os.path.join(os.path.dirname(__file__), "..", "data", "OnlineRetail.xlsx")
+    df, df_train, df_valid, summary, summary_valid, split_date, end_date = run_prep_pipeline(path)
+    print(summary.head())
