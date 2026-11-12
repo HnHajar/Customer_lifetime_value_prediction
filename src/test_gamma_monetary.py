@@ -270,6 +270,135 @@ print(
 print("TEST 8 : OK")
 
 
+
+# ==================================================
+# TEST 9 : VALIDATION GAMMA-GAMMA
+# ==================================================
+
+print("\n=== TEST 9 : VALIDATION GAMMA-GAMMA ===")
+
+# Construire les commandes de validation
+valid_orders = (
+    df_valid.groupby(
+        ["CustomerID", "InvoiceNo"],
+        as_index=False
+    )
+    .agg(
+        OrderRevenue=("OrderRevenue", "sum")
+    )
+)
+
+# Montant moyen reel par commande future
+actual_monetary = (
+    valid_orders.groupby("CustomerID")["OrderRevenue"]
+    .mean()
+    .reset_index(name="actual_monetary")
+)
+
+actual_monetary["CustomerID"] = (
+    actual_monetary["CustomerID"].astype(str)
+)
+
+# Associer les predictions aux clients
+predictions = comparison[
+    ["CustomerID", "frequency_original", "monetary_new"]
+].copy()
+
+predictions["predicted_monetary"] = (
+    ggf.conditional_expected_average_profit(
+        predictions["frequency_original"],
+        predictions["monetary_new"]
+    )
+)
+
+# Conserver les clients ayant des achats futurs
+validation = predictions.merge(
+    actual_monetary,
+    on="CustomerID",
+    how="inner",
+    validate="one_to_one"
+)
+
+print("Clients evalues :", len(validation))
+
+assert not validation.empty
+
+errors = (
+    validation["predicted_monetary"]
+    - validation["actual_monetary"]
+)
+
+mae = np.abs(errors).mean()
+rmse = np.sqrt(np.mean(errors ** 2))
+
+correlation = validation[
+    ["predicted_monetary", "actual_monetary"]
+].corr().iloc[0, 1]
+
+print("MAE :", round(mae, 2), "GBP")
+print("RMSE :", round(rmse, 2), "GBP")
+print("Correlation :", round(correlation, 4))
+
+print(
+    "Montant moyen reel :",
+    round(validation["actual_monetary"].mean(), 2),
+    "GBP"
+)
+
+print(
+    "Montant moyen predit :",
+    round(validation["predicted_monetary"].mean(), 2),
+    "GBP"
+)
+
+print("\nExemples de predictions :")
+print(
+    validation[
+        ["CustomerID", "predicted_monetary", "actual_monetary"]
+    ].head(10).to_string(index=False)
+)
+
+print("\nTEST 9 : TERMINE")
+
+baseline_errors = (
+    validation["monetary_new"]
+    - validation["actual_monetary"]
+)
+
+baseline_mae = np.abs(baseline_errors).mean()
+baseline_rmse = np.sqrt(np.mean(baseline_errors ** 2))
+
+print("\n=== COMPARAISON AVEC MODELE SIMPLE ===")
+print("MAE Gamma-Gamma :", round(mae, 2), "GBP")
+print("MAE Baseline :", round(baseline_mae, 2), "GBP")
+print("RMSE Gamma-Gamma :", round(rmse, 2), "GBP")
+print("RMSE Baseline :", round(baseline_rmse, 2), "GBP")
+
+
+# ==================================================
+# TEST 10 : HYPOTHESE D'INDEPENDANCE
+# ==================================================
+
+print("\n=== TEST 10 : INDEPENDANCE GAMMA-GAMMA ===")
+
+from scipy.stats import spearmanr
+
+correlation_spearman, p_value = spearmanr(
+    comparison["frequency_original"],
+    comparison["monetary_new"]
+)
+
+print("Correlation Spearman :", round(correlation_spearman, 4))
+print("P-value :", round(p_value, 6))
+
+if abs(correlation_spearman) < 0.1:
+    print("Dependance monotone faible")
+else:
+    print("Dependance monotone a examiner")
+
+print("TEST 10 : TERMINE")
+
+
 # ==================================================
 # BILAN FINAL
 # ==================================================
