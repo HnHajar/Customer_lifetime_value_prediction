@@ -50,20 +50,25 @@ def load_data(filepath: str) -> pd.DataFrame:
 
 # ── Train / Validation Split ──────────────────────────────────────────────────
 
-def split_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.Timestamp]:
+def split_data(df: pd.DataFrame):
+    start_date = df["InvoiceDate"].min().normalize()
+    end_date = df["InvoiceDate"].max().normalize()
 
-    min_date = df["InvoiceDate"].min() #on recupere la premiere date 
-    max_date = df["InvoiceDate"].max() #la derniere date 
-    total_days = (max_date - min_date).days # on calcul la duree totale 
+    total_days = (end_date - start_date).days
+    split_date = start_date + pd.Timedelta(
+        days=int(total_days * TRAIN_FRACTION)
+    )
 
-    split_date = min_date + pd.Timedelta(days=int(total_days * TRAIN_FRACTION)) #calculer la date de separation (c est temporel c est pas fixe )
-    end_date   = max_date
-    #on separe les donnees
-    df_train = df[df["InvoiceDate"] <= split_date] #on inclu les transactions du jour de separations dans training 
-    df_valid  = df[df["InvoiceDate"] >  split_date]
-    #resultats : 2 dataframes df_train historiques des achats pour entrainement , et df_valid pour evaluer les predictions
-    print(f"\n  Train period : {min_date.date()} → {split_date.date()} ({len(df_train):,} transactions)")
-    print(f"  Valid period : {split_date.date()} → {end_date.date()} ({len(df_valid):,} transactions)")
+    df_train = df[df["InvoiceDate"] < split_date]
+    df_valid = df[df["InvoiceDate"] >= split_date]
+
+    print(f"\n  Train period : {start_date.date()} → "
+          f"{(split_date - pd.Timedelta(days=1)).date()} "
+          f"({len(df_train):,} transactions)")
+
+    print(f"  Valid period : {split_date.date()} → "
+          f"{end_date.date()} "
+          f"({len(df_valid):,} transactions)")
 
     return df_train, df_valid, split_date, end_date
 
@@ -81,52 +86,96 @@ def split_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timesta
 
 # ── passer des transactions individuelles à un tableau qui décrit chaque client avec des indicateurs qui va servire a alimenter les modeles clv───────────────────────────────────────────────────
 def build_customer_summary(df_train: pd.DataFrame, split_date: pd.Timestamp) -> pd.DataFrame:
-    #pour faire cela il faut passer de 2 agregations 
-    # premierement : passer de transactions a commandes , un client peut acheter plusieurs produits dans une meme commande , or pour calculer le clv nous voulons connaitre la valeur de chaque commande pas de chaque produit 
+    # ── 1. Transactions → Factures ─────────────────────────────────
+
     orders = (
-        df_train.groupby(["CustomerID", "InvoiceNo", "InvoiceDate"]) # group.by on regroupe les lignes qui ont les memes idclient et numfacture et date factures , cela pour identifier chaque commande appartenant a un client 
-        ["OrderRevenue"].sum() # pour chaque groupe on additionne les valeurs des produits 
-        .reset_index() #remet les colonnes utilises sous forme de colonnes normales dans la dataframe df_train
+        df_train.groupby(["CustomerID", "InvoiceNo", "InvoiceDate"])
+        ["OrderRevenue"].sum()
+        .reset_index()
     )
-    #on renomme la colonne simplement 
+
     orders.rename(columns={"OrderRevenue": "OrderValue"}, inplace=True)
 
-    #Résultat de la première agrégation
-    #CustomerID	InvoiceNo	InvoiceDate	OrderRevenue
-    #C001	F001	01/01/2021	50 €
-    #C001	F002	05/01/2021	50 €
-    #C002	F003	06/01/2021	15 €
+    # ── 2. Factures → Journées d'achat ─────────────────────────────
 
-    # ON A DONC UNE LIGNE PAR COMMANDE 
+    # On conserve uniquement la date, sans les heures et minutes.
+    orders["PurchaseDay"] = orders["InvoiceDate"].dt.normalize()
 
-
-    # deuxiement : passer de commandes aux clients : une seule ligne par client 
-    summary = (
-        orders.groupby("CustomerID") #on regroupe totues les cmd appartenant au meme client 
-        .agg( #agg()permet d appliquer plusieurs operations d agregation sur chaque groupe 
-            first_purchase = ("InvoiceDate", "min"),
-            last_purchase  = ("InvoiceDate", "max"),
-            n_orders       = ("InvoiceNo",   "nunique"),#nunique compte les valeurs distinctes , le nbrs de factures differentes
-            mean_order_value = ("OrderValue", "mean"),#mean calcule la moyenne
+    purchase_days = (
+        orders.groupby(["CustomerID", "PurchaseDay"])
+        .agg(
+            DailyRevenue=("OrderValue", "sum")
         )
-        .reset_index()#meme principe , remettre customerid sous forme de colonnes 
+        .reset_index()
     )
 
-    #Résultat de la deuxième agrégation
-    #CustomerID	first_purchase	last_purchase	n_orders	mean_order_value
-    #C001	01/01/2021	05/01/2021	2	50 €
-    #C002	06/01/2021	06/01/2021	1	15 €
+    # ── 3. Journées d'achat → Clients ──────────────────────────────
 
-    #ON A DONC UNE SEULE LIGNE PAR CLIENT 
+    # Informations calculées à partir des journées d'achat.
+    day_summary = (
+        purchase_days.groupby("CustomerID")
+        .agg(
+            first_purchase=("PurchaseDay", "min"),
+            last_purchase=("PurchaseDay", "max"),
+            n_purchase_days=("PurchaseDay", "nunique")
+        )
+        .reset_index()
+    )
 
+    # Informations calculées à partir des factures.
+    order_summary = (
+        orders.groupby("CustomerID")
+        .agg(
+            n_orders=("InvoiceNo", "nunique"),
+            total_revenue=("OrderValue", "sum"),
+            mean_order_value=("OrderValue", "mean")
+        )
+        .reset_index()
+    )
 
-    # et puis calculer les variables rfm+: frequency , recency, T , monetary
-    summary["frequency"] = summary["n_orders"] - 1     # frequency c est le nombre d achats repetes : n_orders-1 , Pourquoi ?
+    # Fusionner les informations des deux niveaux.
+    summary = day_summary.merge(
+        order_summary,
+        on="CustomerID",
+        how="inner"
+    )
+
+    #les variables rfm+: frequency , recency, T , monetary
+    summary["frequency"] = summary["n_purchase_days"] - 1     # frequency c est le nombre d achats repetes : n_orders-1 , Pourquoi ?
     # exemple : 1 commande : frequency =0 , 2 commandes ca donne frequency=1 etccc, et donc le premier achat est considere comme l aquissition du client , on cherche a modeliser les achats repetes 
     summary["recency"]   = (summary["last_purchase"]  - summary["first_purchase"]).dt.days #recency c est le temps entre premier et dernier achat : las_purchase-first_purchase
     summary["T"]         = (split_date - summary["first_purchase"]).dt.days #duree d'observation du client : deuc clients peuvent effectue chacun 3 achats , mais sur des periodes differentes , split_date - first_purchase
-    summary["monetary"]  = summary["mean_order_value"] # monetary c est la valeur moyenne d une cmd 
+    summary["monetary"]  = (
+        summary["total_revenue"] / summary["n_orders"]
+    ) # monetary c est la valeur moyenne d une cmd 
+    
+    # ── 5. Calcul de repeat_monetary (Gamma-Gamma) ─────────────────
 
+    # Exclure le premier jour d'achat de chaque client.
+    repeat_days = purchase_days.merge(
+        day_summary[["CustomerID", "first_purchase"]],
+        on="CustomerID",
+        how="left"
+    )
+
+    repeat_days = repeat_days[
+        repeat_days["PurchaseDay"] > repeat_days["first_purchase"]
+    ]
+
+    # Moyenne des montants des journées d'achat répétées.
+    repeat_summary = (
+        repeat_days.groupby("CustomerID")
+        .agg(
+            repeat_monetary=("DailyRevenue", "mean")
+        )
+        .reset_index()
+    )
+
+    summary = summary.merge(
+        repeat_summary,
+        on="CustomerID",
+        how="left"
+    )
     # Remove customers with T = 0 (purchased only on the last day)
     summary = summary[summary["T"] > 0]
 
@@ -172,24 +221,38 @@ def build_customer_summary(df_train: pd.DataFrame, split_date: pd.Timestamp) -> 
 
 # ── Validation Summary ────────────────────────────────────────────────────────
 
-#on veut construire un tableau de validatgion en ajoutant les achats reelement effectues pendant la periode de validation au tableau des indicateurs clients construit avec training 
-def build_validation_summary(df_valid: pd.DataFrame, summary: pd.DataFrame) -> pd.DataFrame:
-    #Elle effectue trois opérations :
-    #1. Compter les achats réels de chaque client dans df_valid avec groupby() et nunique().
-    #2. Associer ces résultats au tableau summary avec merge(), grâce à CustomerID.
-    #3. Remplacer les valeurs manquantes par 0 avec fillna(0)
+def build_validation_summary(
+    df_valid: pd.DataFrame,
+    summary: pd.DataFrame
+) -> pd.DataFrame:
 
-    #1
-    actual = (
-        df_valid[df_valid["CustomerID"].isin(summary["CustomerID"])]#isin conserve uniquement les clients presents dans summary , ceux connus pendant training 
-        .groupby("CustomerID")["InvoiceNo"]
-        .nunique()
-        .reset_index()
-        .rename(columns={"InvoiceNo": "actual_future_purchases"})#donne un nom explicite a la nouvelle colonne 
+    # Garder uniquement les clients connus pendant le train.
+    valid_customers = df_valid[
+        df_valid["CustomerID"].isin(summary["CustomerID"])
+    ].copy()
+
+    # Compter les journées d'achat distinctes par client.
+    valid_customers["PurchaseDay"] = (
+        valid_customers["InvoiceDate"].dt.normalize()
     )
 
-    summary_valid = summary.merge(actual, on="CustomerID", how="left") #fusionner les deux tableaux , on ajoute les achats reels a chaque client en utilisant son id 
-    summary_valid["actual_future_purchases"] = summary_valid["actual_future_purchases"].fillna(0) #un client abscent de actual , on le remplace par 0
+    actual = (
+        valid_customers.groupby("CustomerID")["PurchaseDay"]
+        .nunique()
+        .reset_index()
+        .rename(columns={"PurchaseDay": "actual_future_purchases"})
+    )
+
+    # Ajouter les achats réels au tableau des clients.
+    summary_valid = summary.merge(
+        actual,
+        on="CustomerID",
+        how="left"
+    )
+
+    summary_valid["actual_future_purchases"] = (
+        summary_valid["actual_future_purchases"].fillna(0)
+    )
 
     return summary_valid
 
