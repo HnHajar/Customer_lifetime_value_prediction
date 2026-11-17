@@ -1,8 +1,10 @@
-
 from pathlib import Path
+
+import pandas as pd
 
 from src.data_prep import run_prep_pipeline
 from src.clv_bgnbd import run_bgnbd_pipeline
+from src.clv_simple import run_simple_clv_pipeline
 
 
 def main():
@@ -30,9 +32,18 @@ def main():
         split_date,
         end_date
     ) = run_prep_pipeline(str(data_path))
+
     summary_valid.attrs["validation_days"] = (
-    end_date - split_date
-).total_seconds() / 86400
+        end_date - split_date
+    ).total_seconds() / 86400
+
+    # ETAPE 1B : CLV simple
+    df_clv_simple, simple_segments = run_simple_clv_pipeline(summary)
+
+    simple_path = output_dir / "simple_clv_predictions.csv"
+    simple_segments_path = output_dir / "simple_clv_segments.csv"
+    df_clv_simple.to_csv(simple_path, index=False)
+    simple_segments.to_csv(simple_segments_path, index=False)
 
     # ETAPE 2 : BG/NBD + Gamma-Gamma
     (
@@ -57,12 +68,7 @@ def main():
 
     # ETAPE 5 : Enregistrer la validation
     metrics_path = output_dir / "bgnbd_validation_metrics.csv"
-
-    import pandas as pd
-
-    pd.DataFrame(
-        [validation_metrics]
-    ).to_csv(metrics_path, index=False)
+    pd.DataFrame([validation_metrics]).to_csv(metrics_path, index=False)
 
     # ETAPE 6 : Enregistrer les predictions de validation
     validation_path = output_dir / "bgnbd_validation_predictions.csv"
@@ -73,6 +79,8 @@ def main():
     print("====================================")
 
     print("\nResultats sauvegardes dans outputs/")
+    print("-", simple_path.name)
+    print("-", simple_segments_path.name)
     print("-", clv_path.name)
     print("-", segment_path.name)
     print("-", metrics_path.name)
