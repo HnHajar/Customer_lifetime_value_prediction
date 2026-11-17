@@ -44,8 +44,7 @@ def main():
         validation_results
     ) = run_bgnbd_pipeline(
         summary,
-        summary_valid,
-        df_train
+        summary_valid
     )
 
     # ETAPE 3 : Enregistrer les predictions CLV
