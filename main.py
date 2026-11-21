@@ -5,7 +5,7 @@ import pandas as pd
 from src.data_prep import run_prep_pipeline
 from src.clv_bgnbd import run_bgnbd_pipeline
 from src.clv_simple import run_simple_clv_pipeline
-
+from src.visualizations import generate_all_plots, build_df_combined
 
 def main():
     # Chemin du projet
@@ -99,6 +99,12 @@ def main():
     print("\nMetriques de validation :")
     for name, value in validation_metrics.items():
         print(f"{name}: {value:.4f}")
+
+    #visualization
+    print("\n[5/5] Generating Visualizations")
+    df_combined = build_df_combined(clv_results, df_clv_simple)
+    generate_all_plots(df_combined, validation_results, validation_metrics)
+
 
 
 if __name__ == "__main__":
