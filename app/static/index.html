@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLV · Tableau de bord clients</title>
+<style>
+:root{--ink:#12202B;--mute:#5C6B73;--bg:#EEF1F0;--panel:#fff;--line:#D8DEDB;--acc:#0B5C63;--acc2:#E8F1F1;
+
+font-family:"Avenir Next","Segoe UI",system-ui,sans-serif;color:var(--ink)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-size:14px;line-height:1.45}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.app{display:grid;grid-template-columns:300px 1fr;min-height:100vh}
+aside{background:var(--ink);color:#E8EEF0;padding:24px 20px;position:sticky;top:0;height:100vh;overflow:auto}
+aside h1{font-size:18px;margin:0 0 2px;font-weight:650}aside p.sub{margin:0 0 22px;color:#9FB0B8;font-size:12.5px}
+aside label{display:block;margin:16px 0 4px;font-size:12.5px;color:#C5D2D8}
+aside .val{float:right;font-variant-numeric:tabular-nums;color:#fff}
+input[type=range]{width:100%;accent-color:#5CC8C8}
+.file{display:block;border:1px dashed #4B6270;border-radius:6px;padding:10px;font-size:12.5px;color:#C5D2D8;cursor:pointer;word-break:break-all}
+.file input{display:none}
+.btn{width:100%;margin-top:20px;padding:11px;border:0;border-radius:6px;background:#5CC8C8;color:#0A2A2E;font-weight:650;cursor:pointer}
+.btn:disabled{opacity:.5;cursor:wait}
+.prog{height:4px;background:#2A3D49;border-radius:2px;margin-top:14px;overflow:hidden}.prog i{display:block;height:100%;width:0;background:#5CC8C8;transition:width .5s}
+#step{font-size:12.5px;margin-top:8px;color:#C5D2D8}
+#log{font:11px/1.4 ui-monospace,Menlo,monospace;color:#8FA3AD;max-height:150px;overflow:auto;margin-top:10px;white-space:pre-wrap}
+#err{color:#FFB4A8;font-size:12.5px;margin-top:10px}
+main{padding:24px 28px 48px;min-width:0}
+.top{display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.top h2{margin:0;font-size:22px;font-weight:650}.top .meta{color:var(--mute);font-size:12.5px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.chip{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 12px 6px 10px;cursor:pointer;display:flex;gap:8px;align-items:center}
+.chip i{width:10px;height:10px;border-radius:50%}.chip[aria-pressed=false]{opacity:.45}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin:20px 0;background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.kpi{padding:14px 18px;border-right:1px solid var(--line)}.kpi:last-child{border:0}
+.kpi b{display:block;font-size:22px;font-weight:650;font-variant-numeric:tabular-nums}.kpi span{color:var(--mute);font-size:12.5px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(12,1fr)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
+.box h3{margin:0 0 2px;font-size:15px}.box p.hint{margin:0 0 10px;color:var(--mute);font-size:12.5px}
+.s7{grid-column:span 7}.s5{grid-column:span 5}.s4{grid-column:span 4}.s6{grid-column:span 6}.s12{grid-column:span 12}
+.cv{position:relative;height:300px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+th{font-weight:600;color:var(--mute);font-size:12.5px;cursor:pointer;user-select:none}
+tbody tr{cursor:pointer}tbody tr:hover{background:var(--acc2)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.seg-row td{vertical-align:top;white-space:normal}.seg-row td:not(.l){white-space:nowrap}.seg-row small{display:block;color:var(--mute);font-size:12px;max-width:34ch}
+.tools{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.tools input{padding:7px 10px;border:1px solid var(--line);border-radius:6px;min-width:200px}
+.tools button,.pager button{padding:7px 12px;border:1px solid var(--line);background:var(--panel);border-radius:6px;cursor:pointer}
+.pager{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:10px;color:var(--mute)}
+.scroll{overflow-x:auto}
+.empty{padding:60px 20px;text-align:center;color:var(--mute)}.empty b{display:block;color:var(--ink);font-size:17px;margin-bottom:6px}
+#drawer{position:fixed;top:0;right:0;width:min(420px,100%);height:100%;background:var(--panel);border-left:1px solid var(--line);padding:22px;transform:translateX(100%);transition:transform .25s;overflow:auto;z-index:5;box-shadow:-8px 0 24px rgba(0,0,0,.08)}
+#drawer.open{transform:none}#drawer dl{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:14px 0}#drawer dt{color:var(--mute)}#drawer dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.x{float:right;border:0;background:none;font-size:22px;cursor:pointer}
+.busy{opacity:.5;pointer-events:none}
+@media(max-width:1000px){.app{grid-template-columns:1fr}aside{position:static;height:auto}.s7,.s5,.s4,.s6{grid-column:span 12}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+<aside>
+  <h1>Valeur client (CLV)</h1>
+  <p class="sub">Traitement BG/NBD + Gamma-Gamma et CLV simple</p>
+  <label class="file" id="fileLbl"><input type="file" id="file" accept=".xlsx,.xls"><span id="fileTxt">Source : data/OnlineRetail.xlsx<br>Cliquer pour importer un autre fichier .xlsx</span></label>
+  <label>Marge brute <span class="val" id="vm">40 %</span></label><input type="range" id="gm" min="5" max="90" step="1" value="40">
+  <label>Taux d'actualisation annuel <span class="val" id="vd">10 %</span></label><input type="range" id="dr" min="0" max="30" step="1" value="10">
+  <label>Horizon de prévision <span class="val" id="vy">3 ans</span></label><input type="range" id="yr" min="1" max="5" step="1" value="3">
+  <button class="btn" id="run">Lancer le traitement</button>
+  <div class="prog"><i id="bar"></i></div><div id="step"></div><div id="err"></div><div id="log"></div>
+</aside>
+<main>
+  <div id="empty" class="box empty"><b>Aucune analyse pour l'instant</b>Lancez le traitement dans le panneau de gauche pour calculer la CLV de chaque client.</div>
+  <div id="content" hidden>
+    <div class="top">
+      <div><h2>Tableau de bord clients</h2><div class="meta" id="meta"></div></div>
+      <div><div class="meta">Segments affichés (cliquer pour filtrer)</div><div class="chips" id="chips"></div></div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="grid" id="grid">
+      <section class="box s7"><h3>Valeur passée et valeur future</h3><p class="hint">Chaque point est un client. Les lignes sont les médianes qui définissent les segments. Cliquer un point ouvre sa fiche.</p><div class="cv" style="height:360px"><canvas id="c-sc"></canvas></div></section>
+      <section class="box s5"><h3>Segments et actions recommandées</h3><p class="hint">Calculé sur tous les clients.</p><div class="scroll"><table id="segT"></table></div></section>
+      <section class="box s4"><h3>Répartition de la CLV</h3><p class="hint" id="histHint"></p><div class="cv"><canvas id="c-h"></canvas></div></section>
+      <section class="box s4"><h3>Probabilité que le client soit encore actif</h3><p class="hint">Nombre de clients par tranche de probabilité.</p><div class="cv"><canvas id="c-a"></canvas></div></section>
+      <section class="box s4"><h3>Fiabilité du modèle</h3><p class="hint">Achats prévus et réels par groupe de clients, sur la période de test.</p><div class="cv" style="height:220px"><canvas id="c-v"></canvas></div><div id="metr" class="hint" style="margin-top:8px"></div></section>
+      <section class="box s12"><h3>Clients</h3>
+        <div class="tools"><input id="q" type="search" placeholder="Rechercher un numéro client" aria-label="Rechercher un client"><button id="exp">Exporter en CSV</button></div>
+        <div class="scroll"><table id="tbl"><thead></thead><tbody></tbody></table></div>
+        <div class="pager"><span id="cnt"></span><button id="prev">Précédent</button><button id="next">Suivant</button></div>
+      </section>
+    </div>
+  </div>
+</main>
+</div>
+<div id="drawer" role="dialog" aria-label="Fiche client"></div>
+<script src="/static/vendor/chart.umd.js"></script>
+<script>
+const $=s=>document.querySelector(s), CUR="$";
+const NAMES={"Champions":"Champions","At Risk":"À risque","Rising Stars":"Étoiles montantes","Dormant":"Dormants"};
+const COL={"Champions":"#2ECC71","At Risk":"#E74C3C","Rising Stars":"#F39C12","Dormant":"#95A5A6"};
+const ACT={"Champions":"Fidéliser : programme VIP, accès anticipé, offres exclusives.","At Risk":"Reconquérir : campagne personnalisée, remise limitée dans le temps.","Rising Stars":"Développer : parcours d'accueil, découverte de produits, fidélité.","Dormant":"Réactiver à bas coût : e-mail seul, arrêt après 2 relances."};
+const SEGS=Object.keys(NAMES);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=v=>v==null?"–":CUR+Math.round(v).toLocaleString("fr-FR");
+const pct=(v,d=0)=>v==null?"–":(v*100).toFixed(d).replace(".",",")+" %";
+const num=(v,d=0)=>v==null?"–":Number(v).toLocaleString("fr-FR",{maximumFractionDigits:d});
+let active=new Set(SEGS), charts={}, tbl={page:1,sort:"bgnbd_clv",order:"desc",total:0}, poll=null, hasData=false;
+const size=12, segParam=()=>active.size===4?"":[...active].join(",");
+
+async function api(url,opt){const r=await fetch(url,opt);if(!r.ok){let m="Erreur "+r.status;try{m=(await r.json()).detail||m}catch(e){}throw new Error(m)}return r}
+const j=async(u,o)=>(await api(u,o)).json();
+function form(){const f=new FormData();f.append("gross_margin",$("#gm").value/100);f.append("discount_rate",$("#dr").value/100);f.append("years",$("#yr").value);return f}
+function labels(){$("#vm").textContent=$("#gm").value+" %";$("#vd").textContent=$("#dr").value+" %";$("#vy").textContent=$("#yr").value+" an"+($("#yr").value>1?"s":"")}
+["gm","dr","yr"].forEach(id=>{$("#"+id).addEventListener("input",labels);$("#"+id).addEventListener("change",()=>{if(hasData)recompute()})});
+
+async function recompute(){$("#content").classList.add("busy");$("#step").textContent="Recalcul des CLV…";
+  try{await api("/api/recompute",{method:"POST",body:form()});await refresh();$("#step").textContent="Paramètres appliqués"}catch(e){$("#err").textContent=e.message}
+  $("#content").classList.remove("busy")}
+
+$("#file").addEventListener("change",e=>{const f=e.target.files[0];$("#fileTxt").textContent=f?"Source : "+f.name:"Source : data/OnlineRetail.xlsx"});
+$("#run").addEventListener("click",async()=>{$("#err").textContent="";const f=form(),file=$("#file").files[0];if(file)f.append("file",file);
+  try{await api("/api/run",{method:"POST",body:f});startPoll()}catch(e){$("#err").textContent=e.message}});
+function startPoll(){$("#run").disabled=true;clearInterval(poll);poll=setInterval(tick,1200);tick()}
+async function tick(){const s=await j("/api/state");$("#bar").style.width=s.progress+"%";$("#step").textContent=s.step;$("#log").textContent=s.log.join("\n");$("#log").scrollTop=1e9;
+  if(s.status==="done"){clearInterval(poll);$("#run").disabled=false;hasData=true;setParams(s.params);refresh()}
+  if(s.status==="error"){clearInterval(poll);$("#run").disabled=false;$("#err").textContent=s.error}}
+function setParams(p){$("#gm").value=Math.round(p.gross_margin*100);$("#dr").value=Math.round(p.discount_rate*100);$("#yr").value=p.years;labels()}
+
+function chip(){$("#chips").innerHTML=SEGS.map(s=>`<button class="chip" data-s="${s}" aria-pressed="${active.has(s)}"><i style="background:${COL[s]}"></i>${NAMES[s]}</button>`).join("");
+  document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const s=b.dataset.s;active.has(s)?active.size>1&&active.delete(s):active.add(s);chip();tbl.page=1;refresh()})}
+
+function mk(id,cfg){charts[id]?.destroy();charts[id]=new Chart($(id),cfg)}
+const base={responsive:true,maintainAspectRatio:false,animation:{duration:250},plugins:{legend:{display:false}}};
+
+async function refresh(){
+  const o=await j("/api/overview?segments="+encodeURIComponent(segParam()));
+  $("#empty").hidden=true;$("#content").hidden=false;
+  const k=o.kpis,p=o.params;
+  $("#meta").textContent=`Source ${o.source||"–"} · marge ${Math.round(p.gross_margin*100)} % · actualisation ${Math.round(p.discount_rate*100)} % · horizon ${p.years} an${p.years>1?"s":""}`;
+  const K=[[num(k.customers),"clients"],[money(k.total_clv),"CLV totale prévue"],[money(k.avg_clv),"CLV moyenne ("+money(k.median_clv)+" médiane)"],[pct(k.prob_alive),"probabilité moyenne d'être actif"],[pct(k.top10_share,1),"de la CLV portée par les 10 meilleurs"],[pct(k.repeat_share),"de clients qui rachètent"]];
+  $("#kpis").innerHTML=K.map(([v,l])=>`<div class="kpi"><b>${v}</b><span>${l}</span></div>`).join("");
+
+  // matrice 2x2
+  const med=a=>{a=[...a].sort((x,y)=>x-y);return a[Math.floor(a.length/2)]};
+  const pts=o.scatter.filter(d=>d.x>0&&d.y>0);
+  const mx=med(pts.map(d=>d.x)),my=med(pts.map(d=>d.y));
+  const lines={id:"med",afterDatasetsDraw(c){const{ctx,chartArea:a,scales:{x,y}}=c;ctx.save();ctx.strokeStyle="#12202B66";ctx.setLineDash([5,4]);ctx.beginPath();
+    const X=x.getPixelForValue(mx),Y=y.getPixelForValue(my);ctx.moveTo(X,a.top);ctx.lineTo(X,a.bottom);ctx.moveTo(a.left,Y);ctx.lineTo(a.right,Y);ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle="#5C6B73";ctx.font="12px sans-serif";ctx.textAlign="right";ctx.fillText("Champions",a.right-6,a.top+14);ctx.textAlign="left";ctx.fillText("Étoiles montantes",a.left+6,a.top+14);ctx.fillText("Dormants",a.left+6,a.bottom-6);ctx.textAlign="right";ctx.fillText("À risque",a.right-6,a.bottom-6);ctx.restore()}};
+  mk("#c-sc",{type:"scatter",plugins:[lines],data:{datasets:SEGS.filter(s=>active.has(s)).map(s=>({label:NAMES[s],data:pts.filter(d=>d.s===s),backgroundColor:COL[s]+"CC",pointRadius:3.5,pointHoverRadius:6}))},
+    options:{...base,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Client ${c.raw.id} · simple ${money(c.raw.x)} · futur ${money(c.raw.y)}`}}},
+      onClick:(e,els,ch)=>{if(els.length)openCust(ch.data.datasets[els[0].datasetIndex].data[els[0].index].id)},
+      scales:{x:{type:"logarithmic",title:{display:true,text:"CLV simple (historique projeté)"},ticks:{callback:v=>[1,10,100,1e3,1e4,1e5].includes(v)?money(v):""}},y:{type:"logarithmic",title:{display:true,text:"CLV BG/NBD (avec risque de départ)"},ticks:{callback:v=>[1,10,100,1e3,1e4,1e5].includes(v)?money(v):""}}}}});
+
+  // segments
+  $("#segT").innerHTML=`<thead><tr><th class="l">Segment</th><th>Clients</th><th>CLV moy.</th><th>Actif</th></tr></thead><tbody>`+o.segments.map(s=>`<tr class="seg-row"><td class="l"><span class="dot" style="background:${COL[s.segment]}"></span><b>${NAMES[s.segment]}</b><small>${ACT[s.segment]}</small></td><td>${num(s.customers)}</td><td>${money(s.avg_clv)}</td><td>${pct(s.prob_alive)}</td></tr>`).join("")+"</tbody>";
+
+  // histogrammes
+  const e=o.hist.edges;
+  mk("#c-h",{type:"bar",data:{labels:o.hist.counts.map((_,i)=>money(e[i])),datasets:[{data:o.hist.counts,backgroundColor:"#0B5C63",categoryPercentage:1,barPercentage:.95}]},options:{...base,scales:{x:{ticks:{maxTicksLimit:6},title:{display:true,text:"CLV BG/NBD"}},y:{title:{display:true,text:"Clients"}}}}});
+  $("#histHint").textContent=`Les valeurs au-delà de ${money(o.hist.clipped_at)} sont regroupées dans la dernière barre.`;
+  mk("#c-a",{type:"bar",data:{labels:o.alive_hist.map((_,i)=>`${i*10}–${i*10+10} %`),datasets:[{data:o.alive_hist,backgroundColor:"#0B5C63",categoryPercentage:1,barPercentage:.95}]},options:{...base,scales:{x:{ticks:{maxTicksLimit:5}},y:{title:{display:true,text:"Clients"}}}}});
+  mk("#c-v",{type:"bar",data:{labels:o.calibration.map((_,i)=>i+1),datasets:[{label:"Prévu",data:o.calibration.map(d=>d.pred),backgroundColor:"#0B5C63"},{label:"Réel",data:o.calibration.map(d=>d.actual),backgroundColor:"#F39C12"}]},options:{...base,plugins:{legend:{display:true,position:"bottom"}},scales:{x:{title:{display:true,text:"Groupes de clients, du moins au plus actif prévu"}},y:{title:{display:true,text:"Achats moyens"}}}}});
+  const m=o.metrics;$("#metr").innerHTML=m.mae==null?"":`Écart total sur les achats : <b>${m.aggregate_error_pct>0?"+":""}${num(m.aggregate_error_pct,1)} %</b> · corrélation <b>${num(m.correlation,2)}</b><br>Erreur (RMSE) : modèle <b>${num(m.rmse,2)}</b> contre ${num(m.rmse_naive_rate,2)} pour une simple extrapolation et ${num(m.rmse_constant,2)} pour la moyenne.`;
+  loadTable();
+}
+
+const COLS=[["CustomerID","Client"],["strategic_segment","Segment"],["bgnbd_clv","CLV BG/NBD"],["simple_clv_npv","CLV simple"],["prob_alive","Actif"],["frequency","Rachats"],["recency","Récence (j)"],["T","Ancienneté (j)"],["monetary","Panier moyen"]];
+async function loadTable(){
+  const u=`/api/customers?q=${encodeURIComponent($("#q").value)}&segments=${encodeURIComponent(segParam())}&sort=${tbl.sort}&order=${tbl.order}&page=${tbl.page}&size=${size}`;
+  const d=await j(u);tbl.total=d.total;
+  $("#tbl thead").innerHTML="<tr>"+COLS.map(([k,l])=>`<th data-k="${k}" class="${k=="strategic_segment"?"l":""}" aria-sort="${tbl.sort==k?(tbl.order=="asc"?"ascending":"descending"):"none"}">${l}${tbl.sort==k?(tbl.order=="asc"?" ▲":" ▼"):""}</th>`).join("")+"</tr>";
+  document.querySelectorAll("#tbl th").forEach(h=>h.onclick=()=>{const k=h.dataset.k;tbl.order=tbl.sort===k&&tbl.order==="desc"?"asc":"desc";tbl.sort=k;tbl.page=1;loadTable()});
+  $("#tbl tbody").innerHTML=d.rows.map(r=>`<tr data-id="${esc(r.CustomerID)}"><td>${esc(r.CustomerID)}</td><td class="l"><span class="dot" style="background:${COL[r.strategic_segment]}"></span>${NAMES[r.strategic_segment]}</td><td>${money(r.bgnbd_clv)}</td><td>${money(r.simple_clv_npv)}</td><td>${pct(r.prob_alive)}</td><td>${num(r.frequency)}</td><td>${num(r.recency)}</td><td>${num(r.T)}</td><td>${money(r.monetary)}</td></tr>`).join("")||`<tr><td colspan="9" class="l">Aucun client ne correspond.</td></tr>`;
+  document.querySelectorAll("#tbl tbody tr[data-id]").forEach(r=>r.onclick=()=>openCust(r.dataset.id));
+  const a=(tbl.page-1)*size+1;$("#cnt").textContent=d.total?`${a}–${Math.min(a+size-1,d.total)} sur ${num(d.total)}`:"0 résultat";
+  $("#prev").disabled=tbl.page<=1;$("#next").disabled=tbl.page*size>=d.total}
+$("#prev").onclick=()=>{tbl.page--;loadTable()};$("#next").onclick=()=>{tbl.page++;loadTable()};
+let qt;$("#q").oninput=()=>{clearTimeout(qt);qt=setTimeout(()=>{tbl.page=1;loadTable()},250)};
+$("#exp").onclick=()=>location.href="/api/export.csv?segments="+encodeURIComponent(segParam());
+
+async function openCust(id){
+  const d=await j("/api/customer/"+encodeURIComponent(id)),i=d.info,dr=$("#drawer");
+  const row=(l,v)=>`<dt>${l}</dt><dd>${v}</dd>`;
+  dr.innerHTML=`<button class="x" aria-label="Fermer">×</button><h3 style="margin:0">Client ${esc(i.CustomerID)}</h3><div class="meta" style="color:var(--mute)"><span class="dot" style="background:${COL[i.strategic_segment]}"></span>${NAMES[i.strategic_segment]}</div><p>${ACT[i.strategic_segment]}</p>
+  <dl>${row("CLV BG/NBD",money(i.bgnbd_clv))}${row("CLV simple",money(i.simple_clv_npv))}${row("Probabilité d'être actif",pct(i.prob_alive))}${row("Valeur d'achat attendue",money(i.predicted_avg_value))}${row("Premier achat",esc(i.first_purchase))}${row("Dernier achat",esc(i.last_purchase))}${row("Commandes",num(i.n_orders))}${row("Chiffre d'affaires cumulé",money(i.total_revenue))}${row("Panier moyen",money(i.monetary))}</dl>
+  <h4 style="margin:18px 0 4px">Achats attendus sur 12 mois (cumul)</h4><div class="cv" style="height:200px"><canvas id="c-cu"></canvas></div>`;
+  dr.classList.add("open");dr.querySelector(".x").onclick=()=>dr.classList.remove("open");dr.querySelector(".x").focus();
+  mk("#c-cu",{type:"line",data:{labels:d.curve.map((_,m)=>m),datasets:[{data:d.curve,borderColor:"#0B5C63",backgroundColor:"#0B5C6322",fill:true,tension:.25,pointRadius:2}]},options:{...base,scales:{x:{title:{display:true,text:"Mois"}},y:{title:{display:true,text:"Achats"}}}}})}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")$("#drawer").classList.remove("open")});
+
+(async()=>{labels();chip();const s=await j("/api/state");setParams(s.params);
+  if(!s.default_data_exists)$("#fileTxt").innerHTML="<b>data/OnlineRetail.xlsx introuvable.</b><br>Cliquer pour importer le fichier .xlsx";
+  if(s.status==="running")startPoll();else if(s.has_data){hasData=true;refresh()}})();
+</script>
+</body>
+</html>
